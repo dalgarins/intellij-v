@@ -6,10 +6,12 @@ import com.intellij.openapi.project.Project
 import io.vlang.ide.ui.VIcons
 
 class VlangRunConfigurationType : ConfigurationTypeBase(
-    ID, "V Build",
+    ID,
+    "V",
     "Run V project",
     VIcons.V
 ) {
+
     companion object {
         const val ID = "VlangRun"
     }
@@ -19,9 +21,13 @@ class VlangRunConfigurationType : ConfigurationTypeBase(
             override fun getId() = ID
 
             override fun createTemplateConfiguration(project: Project) =
-                VlangRunConfiguration(project, this, "Run V project")
+                VlangRunConfiguration(project, this, null)
 
             override fun getOptionsClass() = VlangRunConfigurationOptions::class.java
+
+            override fun getName(): String = "V Build"
+
+            override fun isEditableInDumbMode(): Boolean = true
         })
     }
 }

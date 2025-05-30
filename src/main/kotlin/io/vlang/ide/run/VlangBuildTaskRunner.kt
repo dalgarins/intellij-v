@@ -2,6 +2,7 @@ package io.vlang.ide.run
 
 import com.intellij.build.BuildViewManager
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.configurations.GeneralCommandLine.ParentEnvironmentType.*
 import com.intellij.execution.process.ProcessAdapter
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.openapi.application.invokeLater
@@ -10,16 +11,16 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.task.*
 import com.intellij.util.execution.ParametersListUtil
-import org.jetbrains.concurrency.AsyncPromise
-import org.jetbrains.concurrency.Promise
-import org.jetbrains.concurrency.rejectedPromise
-import org.jetbrains.concurrency.resolvedPromise
 import io.vlang.configurations.VlangConfigurationUtil
 import io.vlang.configurations.VlangProjectSettingsConfigurable
 import io.vlang.debugger.runconfig.VlangDebugRunner
 import io.vlang.notifications.VlangErrorNotification
 import io.vlang.notifications.VlangNotification
 import io.vlang.toolchain.VlangToolchainService.Companion.toolchainSettings
+import org.jetbrains.concurrency.AsyncPromise
+import org.jetbrains.concurrency.Promise
+import org.jetbrains.concurrency.rejectedPromise
+import org.jetbrains.concurrency.resolvedPromise
 import java.io.File
 
 @Suppress("UnstableApiUsage")
@@ -59,17 +60,20 @@ class VlangBuildTaskRunner : ProjectTaskRunner() {
         conf: VlangRunConfiguration,
         resultPromise: AsyncPromise<Result>,
     ) {
-        val workingDir = File(conf.workingDir)
-        val outputDir = if (conf.outputDir.isEmpty()) null else File(conf.outputDir)
+        val options = conf.expandedOptions()
+
+        val workingDir = File(options.workingDir)
+        val outputFileName = options.outputFileName
+        val outputDir = File(outputFileName).parentFile
 
         if (outputDir != null && !outputDir.exists()) {
             outputDir.mkdirs()
         }
 
-        val pathToBuild = if (conf.runKind == VlangRunConfigurationEditor.RunKind.Directory) {
-            conf.directory
+        val pathToBuild = if (options.runKind == VlangRunConfigurationEditor.RunKind.Directory) {
+            options.directory
         } else {
-            conf.fileName
+            options.fileName
         }
 
         val project = conf.project
@@ -90,12 +94,13 @@ class VlangBuildTaskRunner : ProjectTaskRunner() {
 
         val commandLine = GeneralCommandLine()
             .withExePath(exe.path)
-            .withEnvironment(conf.envs)
+            .withParentEnvironmentType(if (options.isPassParentEnvs) CONSOLE else NONE)
+            .withEnvironment(options.envsMap)
             .withParameters(pathToBuild)
             .withParameters("-color")
             .withWorkDirectory(workingDir)
 
-        if (conf.production) {
+        if (options.production) {
             commandLine.withParameters("-prod")
         }
 
@@ -113,14 +118,11 @@ class VlangBuildTaskRunner : ProjectTaskRunner() {
             }
         }
 
-        val binName = binaryName(conf)
-        if (outputDir != null) {
-            commandLine.withParameters("-o", File(outputDir, binName).absolutePath)
-        } else {
-            commandLine.withParameters("-o", File(workingDir, binName).absolutePath)
+        if (!outputFileName.isEmpty()) {
+            commandLine.withParameters("-o", File(outputFileName).absolutePath)
         }
 
-        val additionalArguments = ParametersListUtil.parse(conf.buildArguments)
+        val additionalArguments = ParametersListUtil.parse(options.buildArguments)
         commandLine.addParameters(additionalArguments)
 
         val handler = VlangProcessHandler(commandLine)
@@ -148,16 +150,26 @@ class VlangBuildTaskRunner : ProjectTaskRunner() {
     }
 
     companion object {
-        fun binaryName(conf: VlangRunConfiguration): String {
-            val name = File(conf.fileName).nameWithoutExtension
+        fun binaryName(options: VlangRunConfigurationOptions.ExpandedOptions): String {
+            val name = if (options.runKind == VlangRunConfigurationEditor.RunKind.File) {
+                val file = File(options.fileName)
+                val execFile = File(file.parentFile, file.nameWithoutExtension).normalize().toString()
+                if (file.isRooted) {
+                    execFile
+                } else {
+                    File(options.workingDir, execFile).normalize().toString()
+                }
+            } else {
+                File(options.workingDir).resolve(File(options.directory)).normalize().name
+            }
             if (SystemInfo.isWindows) {
                 return "$name.exe"
             }
             return name
         }
 
-        fun debugSymbolDir(conf: VlangRunConfiguration): String {
-            val name = File(conf.fileName).nameWithoutExtension
+        fun debugSymbolDir(options: VlangRunConfigurationOptions.ExpandedOptions): String {
+            val name = File(options.fileName).nameWithoutExtension
             return "$name.dSYM"
         }
     }

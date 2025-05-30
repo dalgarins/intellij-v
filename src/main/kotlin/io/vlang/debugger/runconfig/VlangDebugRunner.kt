@@ -1,6 +1,7 @@
 package io.vlang.debugger.runconfig
 
 import com.intellij.execution.configurations.*
+import com.intellij.execution.configurations.GeneralCommandLine.ParentEnvironmentType.*
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.runners.AsyncProgramRunner
 import com.intellij.execution.runners.ExecutionEnvironment
@@ -31,21 +32,27 @@ open class VlangDebugRunner : AsyncProgramRunner<RunnerSettings>() {
 
     private fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
         if (state !is VlangRunConfigurationRunState) return null
-        // TODO: Since assertAvailability uses internal API we cannot check if debugger is supported.
-        //       Maybe checking for existence of a given class cloud help ?
-        //assertAvailability()
 
-        val conf = state.conf
-        val workingDir = conf.workingDir
-        val outputDir = if (conf.outputDir.isEmpty()) File(conf.workingDir) else File(conf.outputDir)
+        val options = state.options
+        val workingDir = options.workingDir
+        val outputFileName = options.outputFileName
 
-        val binName = VlangBuildTaskRunner.binaryName(conf)
-        val exe = File(outputDir, binName)
+        val binName = if (!outputFileName.isEmpty()) {
+            outputFileName
+        } else {
+            VlangBuildTaskRunner.binaryName(options)
+        }
+
+        val exe = if (File(binName).isRooted) {
+            File(binName)
+        } else {
+            File(workingDir, binName)
+        }
         if (!exe.exists()) {
             throw IllegalStateException("Can't run ${exe.absolutePath}, file not found")
         }
 
-        val cmd = if (conf.emulateTerminal) {
+        val cmd = if (options.emulateTerminal) {
             PtyCommandLine()
                 .withInitialColumns(PtyCommandLine.MAX_COLUMNS)
                 .withConsoleMode(true)
@@ -58,8 +65,10 @@ open class VlangDebugRunner : AsyncProgramRunner<RunnerSettings>() {
             .withWorkDirectory(workingDir)
             .withCharset(Charsets.UTF_8)
             .withRedirectErrorStream(true)
+            .withParentEnvironmentType(if (options.isPassParentEnvs) CONSOLE else NONE)
+            .withEnvironment(options.envsMap)
 
-        val additionalArguments = ParametersListUtil.parse(conf.programArguments)
+        val additionalArguments = ParametersListUtil.parse(options.programArguments)
         commandLine.addParameters(additionalArguments)
 
         return showRunContent(environment, commandLine)
@@ -69,20 +78,6 @@ open class VlangDebugRunner : AsyncProgramRunner<RunnerSettings>() {
         environment: ExecutionEnvironment,
         runExecutable: GeneralCommandLine,
     ): RunContentDescriptor = VlangDebugRunnerUtils.showRunContent(environment, runExecutable)
-
-//    private fun assertAvailability() {
-//        if (!PlatformUtils.isIdeaUltimate() &&
-//            !PlatformUtils.isCidr() &&
-//            !PlatformUtils.isPyCharmPro() &&
-//            !PlatformUtils.isGoIde() &&
-//            !PlatformUtils.isRubyMine() &&
-//            !PlatformUtils.isRider()
-//        ) {
-//            throw ExecutionException(
-//                "Debugging is currently supported in IntelliJ IDEA Ultimate, PyCharm Professional, CLion, GoLand, RubyMine and Rider.", null
-//            )
-//        }
-//    }
 
     companion object {
         const val RUNNER_ID: String = "VlangDebugRunner"

@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [2025.1.1] - 2025-04-29
+
+- Support for intellij platform 2025.1
+  - Remove pluginUntilBuild setting - plugin if compatible should be usable across new major version releases
+- Fix 'Slow operations are prohibited on EDT' error after project opening
+- Fix mismatch of indexes and psi after `v up` command
+- Change Snake case implementation to covert all caps as single word
+- Fix IndexOutOfBoundsException while typing `}` at the end of the document
+- Change order of default value and attribute. Fixes [#22](https://github.com/vlang/intellij-v/issues/22)
+- Builtin functions will not show private members in code completion. Fixes [#9](https://github.com/vlang/intellij-v/issues/9)
+- Add WASM. prefix
+- Remove restrictions for C., JS. completions
+- Refactor RunConfiguration:
+  - Add validation
+  - Use relative paths to working directory
+  - Use `directory` as default run kind
+  - Expand environment variables and pass to build and run/debug configuration
+  - Add macro support
+
 ## [2024.3.1] - 2024-11-14
 
 - Support for intellij platform 2024.3
@@ -232,7 +251,8 @@
 - Don't show `private` keyword in quick documentation
 - Support 2023.1 EAP
 
-[Unreleased]: https://github.com/vlang/intellij-v//compare/v2024.3.1...HEAD
+[Unreleased]: https://github.com/vlang/intellij-v//compare/v2025.1.1...HEAD
+[2025.1.1]: https://github.com/vlang/intellij-v//compare/v2024.3.1...v2025.1.1
 [2024.3.1]: https://github.com/vlang/intellij-v//compare/v0.0.1-beta.6...v2024.3.1
 [0.0.1-beta.6]: https://github.com/vlang/intellij-v//compare/v0.0.1-beta.5...v0.0.1-beta.6
 [0.0.1-beta.5]: https://github.com/vlang/intellij-v//compare/v0.0.1-beta.4...v0.0.1-beta.5
