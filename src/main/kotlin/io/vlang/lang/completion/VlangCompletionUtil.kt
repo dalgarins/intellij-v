@@ -37,6 +37,7 @@ object VlangCompletionUtil {
     const val NOT_IMPORTED_METHOD_PRIORITY = 0
     const val METHOD_PRIORITY = NOT_IMPORTED_METHOD_PRIORITY + 0
     const val NOT_IMPORTED_FUNCTION_PRIORITY = 0
+    const val STATIC_METHOD_PRIORITY = NOT_IMPORTED_FUNCTION_PRIORITY + 0
     const val FUNCTION_PRIORITY = NOT_IMPORTED_FUNCTION_PRIORITY + 0
     const val NOT_IMPORTED_STRUCT_PRIORITY = 0
     const val STRUCT_PRIORITY = NOT_IMPORTED_STRUCT_PRIORITY + 0
@@ -62,14 +63,25 @@ object VlangCompletionUtil {
         "MOD" to "The name of the current module",
         "STRUCT" to "The name of the current struct",
         "FILE" to "The absolute path to the current file",
+        "DIR" to "The absolute path of the *folder*, where the V source file is",
         "LINE" to "The line number of the current line (as a string)",
         "FILE_LINE" to "The relative path and line number of the current line (like @FILE:@LINE)",
+        "LOCATION" to "File, line and name of the current type + method; suitable for logging",
         "COLUMN" to "The column number of the current line (as a string)",
         "VEXE" to "The absolute path to the V compiler executable",
         "VEXEROOT" to "The absolute path to the V compiler executable's root directory",
         "VHASH" to "The V compiler's git hash",
+        "VCURRENTHASH" to "Similar to `@VHASH`, but changes when the compiler is recompiled on a different commit (after local modifications, or after using git bisect etc)",
         "VMOD_FILE" to "The content to the nearest v.mod file",
+        "VMODHASH" to "The shortened commit hash, derived from the .git directory next to the nearest v.mod (as a string)",
         "VMODROOT" to "The absolute path to the nearest v.mod file's directory",
+        "BUILD_DATE" to "The build date, for example '2024-09-13' (UTC timezone)",
+        "BUILD_TIME" to "The build time, for example '12:32:07' (UTC timezone)",
+        "BUILD_TIMESTAMP" to "The build timestamp, for example '1726219885' (UTC timezone)",
+        "OS" to "The OS type, for example 'linux'",
+        "CCOMPILER" to "The C compiler type, for example 'gcc'",
+        "BACKEND" to "The current language backend, for example 'c' or 'golang'",
+        "PLATFORM" to "The platform type, for example 'amd64'",
     )
 
     fun withCamelHumpPrefixMatcher(resultSet: CompletionResultSet): CompletionResultSet {
@@ -210,6 +222,18 @@ object VlangCompletionUtil {
             element, name,
             insertHandler = FunctionInsertHandler(element, null),
             priority = METHOD_PRIORITY,
+        )
+    }
+
+    fun createStaticMethodLookupElement(element: VlangStaticMethodDeclaration): LookupElement? {
+        val name = element.name
+        if (name.isEmpty()) {
+            return null
+        }
+        return createStaticMethodLookupElement(
+            element, name,
+            insertHandler = FunctionInsertHandler(element, null),
+            priority = STATIC_METHOD_PRIORITY,
         )
     }
 
@@ -396,6 +420,18 @@ object VlangCompletionUtil {
         return PrioritizedLookupElement.withPriority(
             LookupElementBuilder.createWithSmartPointer(lookupString, element)
                 .withRenderer(METHOD_RENDERER)
+                .withInsertHandler(insertHandler), priority.toDouble()
+        )
+    }
+
+    fun createStaticMethodLookupElement(
+        element: VlangNamedElement, lookupString: String,
+        insertHandler: InsertHandler<LookupElement>? = null,
+        priority: Int = 0,
+    ): LookupElement {
+        return PrioritizedLookupElement.withPriority(
+            LookupElementBuilder.createWithSmartPointer(lookupString, element)
+                .withRenderer(STATIC_METHOD_RENDERER)
                 .withInsertHandler(insertHandler), priority.toDouble()
         )
     }
@@ -733,6 +769,25 @@ object VlangCompletionUtil {
             p.tailText = signature?.parameters?.text + " of " + type
 
             p.icon = icon
+            p.typeText = typeText
+            p.isTypeGrayed = true
+            p.itemText = element.lookupString + genericParameters
+            p.isStrikeout = elem.isDeprecated()
+        }
+    }
+
+    private val STATIC_METHOD_RENDERER = object : LookupElementRenderer<LookupElement>() {
+        override fun renderElement(element: LookupElement, p: LookupElementPresentation) {
+            val elem = element.psiElement as? VlangStaticMethodDeclaration ?: return
+            val signature = elem.getSignature()
+
+            val genericParameters = elem.genericParameters?.text ?: ""
+            val typeText = signature?.result?.text ?: ""
+
+            val type = elem.typeReferenceExpression.getIdentifier().text // TODO: resolve actual type
+            p.tailText = signature?.parameters?.text + " of " + type
+
+            p.icon = VIcons.StaticMethod
             p.typeText = typeText
             p.isTypeGrayed = true
             p.itemText = element.lookupString + genericParameters

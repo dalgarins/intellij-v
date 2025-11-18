@@ -1,8 +1,6 @@
 package io.vlang.configurations
 
-import com.intellij.openapi.application.AppUIExecutor
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.ui.ComboBoxWithWidePopup
@@ -13,6 +11,7 @@ import com.intellij.ui.components.fields.ExtendableTextComponent
 import com.intellij.ui.components.fields.ExtendableTextField
 import io.vlang.utils.addTextChangeListener
 import io.vlang.utils.pathAsPath
+import kotlinx.coroutines.*
 import java.nio.file.Path
 import javax.swing.plaf.basic.BasicComboBoxEditor
 import kotlin.io.path.pathString
@@ -62,23 +61,18 @@ class VlangToolchainPathChoosingComboBox(onTextChanged: () -> Unit = {}) :
     }
 
     /**
-     * Obtains a list of toolchains on a pool using [toolchainObtainer], then fills the combobox and calls [callback] on the EDT.
+     * Obtains a list of toolchains on a default pool using [toolchainObtainer], then fills the combobox on the EDT.
      */
-    fun addToolchainsAsync(toolchainObtainer: () -> List<Path>) {
-        setBusy(true)
-        ApplicationManager.getApplication().executeOnPooledThread {
-            var toolchains = emptyList<Path>()
-            try {
-                toolchains = toolchainObtainer()
-            } finally {
-                val executor = AppUIExecutor.onUiThread(ModalityState.any()).expireWith(this)
-                executor.execute {
-                    setBusy(false)
-                    childComponent.removeAllItems()
-                    toolchains.forEach(childComponent::addItem)
-                    selectedPath = selectedPath?.ifEmpty { null } ?: (toolchains.firstOrNull()?.pathString ?: "")
-                }
-            }
+    fun addToolchainsAsync(scope: CoroutineScope, toolchainObtainer: () -> List<Path>) = scope.launch {
+        withContext(Dispatchers.EDT) {
+            setBusy(true)
+
+            val toolchains = withContext(Dispatchers.Default) { toolchainObtainer() }
+
+            setBusy(false)
+            childComponent.removeAllItems()
+            toolchains.forEach(childComponent::addItem)
+            selectedPath = selectedPath?.ifEmpty { null } ?: (toolchains.firstOrNull()?.pathString ?: "")
         }
     }
 }
